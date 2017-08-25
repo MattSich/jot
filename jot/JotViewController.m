@@ -256,6 +256,14 @@
     [self.drawView clearDrawing];
 }
 
+-(void)undoDrawing{
+    [self.drawView undoDrawing];
+}
+
+-(int)historyNumber{
+    return [self.drawView historyNumber];
+}
+
 - (void)clearText
 {
     self.textString = @"";

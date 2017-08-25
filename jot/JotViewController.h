@@ -171,6 +171,17 @@ typedef NS_ENUM(NSUInteger, JotViewState){
 - (void)clearDrawing;
 
 /**
+ *  Undo to last drawn
+ */
+- (void)undoDrawing;
+
+/**
+ *  Get number of items in history
+ */
+
+-(int)historyNumber;
+
+/**
  *  Clears only the text, leaving the drawing alone.
  */
 - (void)clearText;

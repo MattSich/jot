@@ -28,6 +28,8 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
 @property (nonatomic, assign) CGFloat lastWidth;
 @property (nonatomic, assign) CGFloat initialVelocity;
 
+@property (nonatomic, strong) NSMutableArray* history;
+
 @end
 
 @implementation JotDrawView
@@ -51,12 +53,18 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
         _lastWidth = _strokeWidth;
         
         self.userInteractionEnabled = NO;
+        
+        _history = [[NSMutableArray alloc] init];
     }
     
     return self;
 }
 
 #pragma mark - Undo
+
+-(int)historyNumber{
+    return (int)_history.count;
+}
 
 - (void)clearDrawing
 {
@@ -76,6 +84,22 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
                         [self setNeedsDisplay];
                     }
                     completion:nil];
+}
+
+-(void)undoDrawing{
+    
+    NSLog(@"HISTORY: %@", _history);
+    if (_history.count > 0) {
+        [_history removeLastObject];
+        self.cachedImage = [_history lastObject];
+        
+        [UIView transitionWithView:self duration:0.2f
+                           options:UIViewAnimationOptionTransitionCrossDissolve
+                        animations:^{
+                            [self setNeedsDisplay];
+                        }
+                        completion:nil];
+    }
 }
 
 #pragma mark - Properties
@@ -135,7 +159,7 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
         self.pointsArray[0] = self.pointsArray[3];
         self.pointsArray[1] = self.pointsArray[4];
         
-        [self drawBitmap];
+        [self drawBitmapAndSave:NO];
         
         [self.pointsArray removeLastObject];
         [self.pointsArray removeLastObject];
@@ -146,7 +170,7 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
 
 - (void)drawTouchEnded
 {
-    [self drawBitmap];
+    [self drawBitmapAndSave:YES];
     
     self.lastVelocity = self.initialVelocity;
     self.lastWidth = self.strokeWidth;
@@ -154,7 +178,7 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
 
 #pragma mark - Drawing
 
-- (void)drawBitmap
+- (void)drawBitmapAndSave:(BOOL)save
 {
     UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, [UIScreen mainScreen].scale);
     
@@ -176,8 +200,16 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
     }
     
     self.cachedImage = UIGraphicsGetImageFromCurrentImageContext();
+    
+    //ADD BITMAP TO HISTORY
+    if (save) {
+        NSLog(@"Adding image %@ to history", UIGraphicsGetImageFromCurrentImageContext());
+        [_history addObject:UIGraphicsGetImageFromCurrentImageContext()];
+    }
+    
     UIGraphicsEndImageContext();
     [self setNeedsDisplay];
+    
 }
 
 - (void)drawRect:(CGRect)rect
@@ -192,12 +224,6 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
     return self.strokeWidth - ((self.strokeWidth * (1.f - kJotRelativeMinStrokeWidth)) / (1.f + (CGFloat)pow((double)M_E, (double)(-((velocity - self.initialVelocity) / self.initialVelocity)))));
 }
 
-- (void)setStrokeColor:(UIColor *)strokeColor
-{
-    _strokeColor = strokeColor;
-    self.bezierPath = nil;
-}
-
 - (JotTouchBezier *)bezierPath
 {
     if (!_bezierPath) {
@@ -205,6 +231,9 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
         [self.pathsArray addObject:_bezierPath];
         _bezierPath.constantWidth = self.constantStrokeWidth;
     }
+    
+    _bezierPath.strokeColor = self.strokeColor;
+   
     
     return _bezierPath;
 }
@@ -228,9 +257,14 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
     
     UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, scale);
     
-    [backgroundImage drawInRect:CGRectMake(0.f, 0.f, CGRectGetWidth(self.bounds), CGRectGetHeight(self.bounds))];
+    CGFloat newWidth = backgroundImage.size.width/backgroundImage.size.height * CGRectGetHeight(self.bounds);
+
+    CGFloat newX = -(newWidth - CGRectGetWidth(self.bounds))/2.0f;
     
-    [self drawAllPaths];
+    [backgroundImage drawInRect:CGRectMake(newX, 0.f, newWidth, CGRectGetHeight(self.bounds))];
+    
+    [[_history lastObject] drawInRect:CGRectMake(0.f, 0.f, CGRectGetWidth(self.bounds), CGRectGetHeight(self.bounds))];
+    //[self drawAllPaths];
     
     UIImage *drawnImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
@@ -241,7 +275,7 @@ CGFloat const kJotRelativeMinStrokeWidth = 0.4f;
 
 - (void)drawAllPaths
 {
-    for (NSObject *path in self.pathsArray) {
+    for (NSObject *path in _history) {
         if ([path isKindOfClass:[JotTouchBezier class]]) {
             [(JotTouchBezier *)path jotDrawBezier];
         } else if ([path isKindOfClass:[JotTouchPoint class]]) {
